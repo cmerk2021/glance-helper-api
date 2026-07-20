@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py jmap_client.py ./
+COPY app.py jmap_client.py caldav_client.py ./
 
 EXPOSE 8080
 
