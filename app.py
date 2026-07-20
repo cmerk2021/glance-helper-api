@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from caldav_client import CalDAVClient
 from jmap_client import JMAPClient
 
 load_dotenv()
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TOKEN = os.environ.get("FASTMAIL_API_TOKEN", "")
+CALDAV_USER = os.environ.get("FASTMAIL_USERNAME", "")
+CALDAV_PASS = os.environ.get("FASTMAIL_APP_PASSWORD", "")
 TIMEZONE = os.environ.get("TIMEZONE", "UTC")
 MAX_EMAILS = int(os.environ.get("MAX_EMAILS", "10"))
 MAIL_CACHE_TTL = int(os.environ.get("MAIL_CACHE_TTL", "300"))
@@ -28,15 +31,21 @@ CAL_CACHE_TTL = int(os.environ.get("CAL_CACHE_TTL", "300"))
 # ---------------------------------------------------------------------------
 
 _jmap: JMAPClient | None = None
+_caldav: CalDAVClient | None = None
 _cache: dict = {}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _jmap
+    global _jmap, _caldav
     if not TOKEN:
-        logger.warning("FASTMAIL_API_TOKEN is not set — endpoints will return 503")
+        logger.warning("FASTMAIL_API_TOKEN is not set — /mail will return 503")
+    if not CALDAV_USER or not CALDAV_PASS:
+        logger.warning(
+            "FASTMAIL_USERNAME / FASTMAIL_APP_PASSWORD not set — /calendar will return 503"
+        )
     _jmap = JMAPClient(TOKEN, TIMEZONE)
+    _caldav = CalDAVClient(CALDAV_USER, CALDAV_PASS, TIMEZONE)
     yield
 
 
@@ -96,17 +105,22 @@ async def unread_mail():
 @app.get("/calendar")
 async def today_events():
     """Return today's calendar events as JSON suitable for a Glance custom-api widget."""
-    if not TOKEN:
-        raise HTTPException(503, detail="FASTMAIL_API_TOKEN not configured")
+    if not CALDAV_USER or not CALDAV_PASS:
+        raise HTTPException(
+            503,
+            detail="FASTMAIL_USERNAME / FASTMAIL_APP_PASSWORD not configured. "
+                   "Fastmail calendar requires CalDAV with an app password, not an API token. "
+                   "Generate one at: Settings → Privacy & Security → Manage app passwords",
+        )
 
     if (cached := _get_cached("calendar", CAL_CACHE_TTL)) is not None:
         return cached
 
     try:
-        data = await _jmap.get_today_events()
+        data = await _caldav.get_today_events()
     except Exception as exc:
         logger.error("Failed to fetch calendar: %s", exc)
-        raise HTTPException(502, detail=f"Upstream JMAP error: {exc}")
+        raise HTTPException(502, detail=f"Upstream CalDAV error: {exc}")
 
     _set_cached("calendar", data)
     return data
