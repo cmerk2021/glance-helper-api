@@ -1,0 +1,74 @@
+# ---------------------------------------------------------------------------
+# Glance widget snippets for glance-helper-api
+#
+# Paste these into your glance.yml under the appropriate pages > columns >
+# widgets section.  Adjust the url hostname/port if glance-helper-api is not
+# running on the same Docker network as Glance.
+#
+# If both containers are in the same docker-compose project, use the service
+# name as the hostname (e.g. http://glance-helper-api:8080).
+# Otherwise use the host IP / DNS name of the machine running the API.
+# ---------------------------------------------------------------------------
+
+# ── Unread Mail widget ─────────────────────────────────────────────────────
+- type: custom-api
+  title: Unread Mail
+  title-url: https://app.fastmail.com/mail/
+  cache: 5m
+  url: http://glance-helper-api:8080/mail
+  template: |
+    {{ $count := .JSON.Int "count" }}
+    {{ if eq $count 0 }}
+      <p class="color-subdue text-center margin-top-15">No unread mail</p>
+    {{ else }}
+      <ul class="list list-gap-14 collapsible-container" data-collapse-after="5">
+        {{ range .JSON.Array "items" }}
+        <li>
+          <a class="size-h4 color-highlight block text-truncate"
+             href="https://app.fastmail.com/mail/">{{ .String "subject" }}</a>
+          <ul class="list-horizontal-text">
+            <li>{{ .String "from" }}</li>
+            <li>
+              <span {{ .String "received_at" | parseRelativeTime "rfc3339" }}></span>
+            </li>
+          </ul>
+        </li>
+        {{ end }}
+      </ul>
+    {{ end }}
+
+
+# ── Today's Calendar Events widget ─────────────────────────────────────────
+- type: custom-api
+  title: Today
+  title-url: https://app.fastmail.com/calendar/
+  cache: 5m
+  url: http://glance-helper-api:8080/calendar
+  template: |
+    {{ $count := .JSON.Int "count" }}
+    {{ if eq $count 0 }}
+      <p class="color-subdue text-center margin-top-15">Nothing scheduled today</p>
+    {{ else }}
+      <ul class="list list-gap-14">
+        {{ range .JSON.Array "items" }}
+        <li>
+          <span class="size-h4 color-highlight block text-truncate">
+            {{ .String "title" }}
+          </span>
+          <ul class="list-horizontal-text">
+            {{ if .Bool "all_day" }}
+              <li>All day</li>
+            {{ else }}
+              <li>
+                {{ .String "start_time" }}
+                {{ if ne (.String "end_time") "" }} – {{ .String "end_time" }}{{ end }}
+              </li>
+            {{ end }}
+            {{ if ne (.String "location") "" }}
+              <li>{{ .String "location" }}</li>
+            {{ end }}
+          </ul>
+        </li>
+        {{ end }}
+      </ul>
+    {{ end }}
